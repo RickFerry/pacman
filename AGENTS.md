@@ -30,6 +30,7 @@ Vanilla JS Pac-Man clone (HTML/CSS/JS). No build, no dependencies, no bundler, n
 
 - Script load order is load-bearing: `game.js` needs `MAZE*` globals from `maze.js`; `render.js` uses `DIRS` from `game.js`; `main.js` uses all.
 - 4 ghosts with distinct personalities: `random` (aleatório), `patrol` (caça se longe, foge se perto), `chaser` (único caçador constante, wrap do túnel), `ambusher` (4 células à frente). `chaser` libera em ~2s e `ambusher` em ~4s (`releaseFrames`); fantasmas presos não se movem.
+- Power pellets are tile `4` (corners). Eating sets `powerTimer=480`; ghosts get `mode` (`frightened`/`eaten`); frightened moves at 0.05 and flees; eaten moves as eyes randomly for 10s (avoiding pen) then respawns in pen. Collision logic depends on `g.mode`.
 - `decideGhost` is called inside `moveGhost` at alignment, using `g.x/g.y` before rounding; don't move that call.
 - Eating a dot and scoring happen in `movePacman` only when aligned; `dotsRemaining` drives win.
 - Collision resets positions only (`resetPositions`); score/lives/grid persist. Lives decrement can chain into `'lost'`.
