@@ -42,6 +42,7 @@ function createGame() {
             dir: 'up',
             speed: GHOST_SPEED,
             kind: g.kind,
+            releaseFrames: g.releaseFrames || 0,
         })),
     };
 }
@@ -110,9 +111,62 @@ function movePacman(game) {
     wrapTunnel(p, width);
 }
 
+function inPen(g) {
+    // Inclui a fileira da porta (12) para forcar a saida.
+    return g.x >= 11 && g.x <= 16 && g.y >= 12 && g.y <= 15;
+}
+
+function distWrap(nx, ny, tx, ty, width) {
+    let dx = Math.abs(nx - tx);
+    if (ny === 14 && ty === 14) {
+        dx = Math.min(dx, width - dx);
+    }
+    return dx + Math.abs(ny - ty);
+}
+
+function targetFor(game, g) {
+    const p = game.pacman;
+    const px = Math.round(p.x);
+    const py = Math.round(p.y);
+    const width = game.grid[0].length;
+    const height = game.grid.length;
+
+    // Preso no pen: mirar a porta para sair.
+    if (inPen(g)) {
+        const tx = g.x < 13.5 ? 13 : 14;
+        return {x: tx, y: 11};
+    }
+
+    if (g.kind === 'patrol') {
+        const dist = Math.abs(g.x - px) + Math.abs(g.y - py);
+        if (dist >= 8) return {x: px, y: py};
+        return {x: 1, y: 29}; // canto inferior esquerdo (Clyde)
+    }
+
+    if (g.kind === 'chaser') {
+        return {x: px, y: py};
+    }
+
+    if (g.kind === 'ambusher') {
+        const dir = p.dir;
+        const d = DIRS[dir] || {x: 0, y: 0};
+        let tx = px + d.x * 4;
+        let ty = py + d.y * 4;
+        if (ty === 14) {
+            tx = ((tx % width) + width) % width;
+        } else {
+            tx = Math.max(0, Math.min(width - 1, tx));
+            ty = Math.max(0, Math.min(height - 1, ty));
+        }
+        return {x: tx, y: ty};
+    }
+
+    return {x: px, y: py};
+}
+
 function decideGhost(game, g) {
     const grid = game.grid;
-    const p = game.pacman;
+    const width = grid[0].length;
 
     const options = Object.keys(DIRS).filter(
         (dir) => dir !== OPPOSITE[g.dir] && canMove(grid, g.x, g.y, dir, 'ghost')
@@ -120,28 +174,34 @@ function decideGhost(game, g) {
     // Sin salida (callejon): permitir el giro de 180.
     const choices = options.length ? options : ['' + OPPOSITE[g.dir]];
 
-    if (g.kind === 'hunter') {
-        const px = Math.round(p.x);
-        const py = Math.round(p.y);
-        let best = choices[0];
-        let bestDist = Infinity;
-        for (const dir of choices) {
-            const d = DIRS[dir];
-            const nx = g.x + d.x;
-            const ny = g.y + d.y;
-            const dist = Math.abs(nx - px) + Math.abs(ny - py);
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = dir;
-            }
-        }
-        g.dir = best;
-    } else {
+    if (g.kind === 'random' && !inPen(g)) {
         g.dir = choices[Math.floor(Math.random() * choices.length)];
+        return;
     }
+
+    // Kinds com alvo: patrol, chaser, ambusher.
+    const target = targetFor(game, g);
+    let best = choices[0];
+    let bestDist = Infinity;
+    for (const dir of choices) {
+        const d = DIRS[dir];
+        const nx = g.x + d.x;
+        const ny = g.y + d.y;
+        const dist = distWrap(nx, ny, target.x, target.y, width);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = dir;
+        }
+    }
+    g.dir = best;
 }
 
 function moveGhost(game, g) {
+    // Fantasma ainda preso no pen: nao move, apenas conta o tempo.
+    if (g.releaseFrames > 0) {
+        g.releaseFrames--;
+        return;
+    }
     const grid = game.grid;
     const width = grid[0].length;
 
@@ -168,6 +228,7 @@ function resetPositions(game) {
         g.x = GHOST_STARTS[i].x;
         g.y = GHOST_STARTS[i].y;
         g.dir = 'up';
+        g.releaseFrames = GHOST_STARTS[i].releaseFrames || 0;
     });
 }
 
